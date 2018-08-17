@@ -2,22 +2,15 @@ module App exposing (..)
 
 import Html exposing (..)
 import Html.Attributes exposing (..)
+import Html.Attributes.Aria exposing (..)
 import Html.Events exposing (..)
-
-
-type alias CounterModel =
-    { value : Int }
-
-
-type alias TodoListModel =
-    { todos : List String
-    , currentTodo : String
-    }
+import CounterWidget
+import TodoListWidget
 
 
 type Widget
-    = Counter CounterModel
-    | TodoList TodoListModel
+    = Counter CounterWidget.Model
+    | TodoList TodoListWidget.Model
 
 
 type alias Model =
@@ -28,7 +21,7 @@ init : ( Model, Cmd Msg )
 init =
     let
         initialModel =
-            [ Counter (CounterModel 5), TodoList (TodoListModel [ "Hello", "World" ] "Current"), Counter (CounterModel 6) ]
+            [ Counter CounterWidget.initialModel, TodoList (TodoListWidget.initialModel) ]
     in
         ( initialModel, Cmd.none )
 
@@ -46,142 +39,125 @@ type alias NewValue =
 
 
 type Msg
-    = AddCounter
-    | AddTodoList
-    | UpdateValue CounterModel WidgetId NewValue
-    | ResetValue CounterModel WidgetId
-    | DeleteWidget WidgetId
-    | UpdateField TodoListModel WidgetId String
-    | AddTodo TodoListModel WidgetId
+    = AddWidget Widget
+    | CounterMsg WidgetId CounterWidget.Msg
+    | TodoListMsg WidgetId TodoListWidget.Msg
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
-update message model =
-    case message of
-        AddCounter ->
-            (List.append model [ Counter (CounterModel 1) ]) ! [ Cmd.none ]
-
-        AddTodoList ->
-            (List.append model [ TodoList (TodoListModel [ "new" ] "list") ]) ! [ Cmd.none ]
-
-        UpdateValue counterModel widgetId newValue ->
-            updateValue counterModel widgetId newValue model
-
-        ResetValue counterModel widgetId ->
-            updateValue counterModel widgetId 0 model
-
-        DeleteWidget widgetId ->
-            (List.take widgetId model ++ List.drop (widgetId + 1) model) ! [ Cmd.none ]
-
-        UpdateField todoListModel widgetId str ->
+update msg model =
+    (case Debug.log "msg" msg of
+        CounterMsg widgetId msg_ ->
             let
-                nextModel =
+                updatedModel =
                     List.indexedMap
                         (\index widget ->
                             if widgetId == index then
-                                TodoList { todoListModel | currentTodo = str }
+                                case Debug.log "widget" widget of
+                                    Counter model ->
+                                        Counter (CounterWidget.update msg_ model)
+
+                                    _ ->
+                                        Debug.crash "Thet ype of the widget should be COunter because the message is sent from a COunter Widget"
                             else
                                 widget
                         )
                         model
             in
-                nextModel ! [ Cmd.none ]
+                updatedModel ! [ Cmd.none ]
 
-        AddTodo todoListModel widgetId ->
+        TodoListMsg widgetId msg_ ->
             let
-                nextModel =
+                updatedModel =
                     List.indexedMap
                         (\index widget ->
                             if widgetId == index then
-                                TodoList { todoListModel | todos = List.append todoListModel.todos [ todoListModel.currentTodo ] }
+                                case Debug.log "widget" widget of
+                                    TodoList model ->
+                                        TodoList (TodoListWidget.update msg_ model)
+
+                                    _ ->
+                                        widget
                             else
                                 widget
                         )
                         model
             in
-                nextModel ! [ Cmd.none ]
+                updatedModel ! [ Cmd.none ]
+
+        AddWidget widget ->
+            case widget of
+                Counter counterModel ->
+                    (List.append model [ Counter counterModel ]) ! [ Cmd.none ]
+
+                TodoList todoListModel ->
+                    (List.append model [ TodoList todoListModel ]) ! [ Cmd.none ]
+    )
+        |> updateOutMsg msg
 
 
-updateValue : CounterModel -> WidgetId -> NewValue -> Model -> ( Model, Cmd Msg )
-updateValue counterModel widgetId newValue model =
-    let
-        nextModel =
-            List.indexedMap
-                (\index widget ->
-                    if widgetId == index then
-                        Counter { counterModel | value = newValue }
-                    else
-                        widget
-                )
-                model
-    in
-        nextModel ! [ Cmd.none ]
+updateOutMsg : Msg -> ( Model, Cmd Msg ) -> ( Model, Cmd Msg )
+updateOutMsg msg ( model, command ) =
+    case msg of
+        CounterMsg widgetId msg_ ->
+            case (CounterWidget.updateOutMsg msg_ CounterWidget.initialModel) of
+                CounterWidget.OutNoOp ->
+                    ( model, command )
+
+                CounterWidget.DeleteWidget ->
+                    (List.take widgetId model ++ List.drop (widgetId + 1) model) ! [ command ]
+
+        TodoListMsg widgetId msg_ ->
+            case (TodoListWidget.updateOutMsg msg_ TodoListWidget.initialModel) of
+                TodoListWidget.OutNoOp ->
+                    ( model, command )
+
+                TodoListWidget.DeleteWidget ->
+                    (List.take widgetId model ++ List.drop (widgetId + 1) model) ! [ command ]
+
+        _ ->
+            ( model, command )
 
 
 
 -- VIEW
 
 
+navbar =
+    nav [ class "navbar is-warning", ariaLabel "main navigation" ]
+        [ div [ class "container" ]
+            [ div [ class "navbar-brand" ]
+                [ a [ class "navbar-item", href "https://bulma.io" ]
+                    [ img [ src "https://bulma.io/images/bulma-logo.png", alt "Bulma: a modern CSS framework based on Flexbox", width 112, height 28 ] []
+                    ]
+                ]
+            , a [ role "button", class "navbar-burger", ariaLabel "menu", ariaExpanded "false" ]
+                [ span [ ariaHidden True ] []
+                , span [ ariaHidden True ] []
+                , span [ ariaHidden True ] []
+                ]
+            ]
+        ]
+
+
 view : Model -> Html Msg
 view model =
-    div [ class "container section" ]
-        [ div [ class "columns is-multiline" ] <| List.indexedMap displayWidget model
-        , button [ class "button", onClick AddCounter ] [ text "Add a counter!" ]
-        , button [ class "button", onClick AddTodoList ] [ text "Add todo list" ]
-        ]
-
-
-counterView : Int -> CounterModel -> Html Msg
-counterView widgetId counterModel =
-    div [ class "column is-one-third" ]
-        [ div [ class "card" ]
-            [ header [ class "card-header" ]
-                [ p [ class "card-header-title" ] [ text ("Counter number " ++ toString (widgetId)) ] ]
-            , div [ class "card-content" ]
-                [ div [ class "content has-text-centered" ]
-                    [ div [] [ text (toString counterModel.value) ]
-                    ]
-                ]
-            , footer [ class "card-footer" ]
-                [ a [ class "card-footer-item", onClick <| UpdateValue counterModel widgetId (counterModel.value - 1) ] [ text "-" ]
-                , a [ class "card-footer-item", onClick <| UpdateValue counterModel widgetId (counterModel.value + 1) ] [ text "+" ]
-                , a [ class "card-footer-item", onClick <| ResetValue counterModel widgetId ] [ text "Reset" ]
-                , a [ class "card-footer-item", onClick <| DeleteWidget widgetId ] [ text "Delete" ]
-                ]
+    div []
+        [ navbar
+        , div
+            [ class "container section" ]
+            [ div [ class "columns is-multiline", style [ ( "height", "800px" ) ] ] <| List.indexedMap displayWidget model
+            , button [ class "button", onClick (AddWidget (Counter CounterWidget.initialModel)) ] [ text "Add a counter!" ]
+            , button [ class "button", onClick (AddWidget (TodoList (TodoListWidget.initialModel))) ] [ text "Add todo list" ]
             ]
         ]
 
 
-todoListView : Int -> TodoListModel -> Html Msg
-todoListView widgetId todoListModel =
-    let
-        todoView todo =
-            li [] [ text todo ]
-    in
-        div [ class "column is-one-third" ]
-            [ div [ class "card" ]
-                [ header [ class "card-header" ]
-                    [ p [ class "card-header-title" ] [ text ("TodoList number " ++ toString (widgetId)) ] ]
-                , div [ class "card-content" ]
-                    [ div [ class "content has-text-centered" ]
-                        [ ul [] (List.map todoView todoListModel.todos)
-                        ]
-                    , input [ placeholder "new todo", onInput (UpdateField todoListModel widgetId), value todoListModel.currentTodo ] []
-                    ]
-                , footer [ class "card-footer" ]
-                    [ a [ class "card-footer-item", onClick (AddTodo todoListModel widgetId) ] [ text "Add todo" ]
-                    , a [ class "card-footer-item" ] [ text "Toggle" ]
-                    , a [ class "card-footer-item", onClick <| DeleteWidget widgetId ] [ text "Delete" ]
-                    ]
-                ]
-            ]
-
-
-displayWidget : Int -> Widget -> Html Msg
+displayWidget : WidgetId -> Widget -> Html Msg
 displayWidget widgetId widgetType =
     case widgetType of
         Counter counterModel ->
-            counterView widgetId counterModel
+            Html.map (CounterMsg widgetId) <| CounterWidget.view widgetId counterModel
 
         TodoList todoListModel ->
-            todoListView widgetId todoListModel
+            Html.map (TodoListMsg widgetId) <| TodoListWidget.view widgetId todoListModel

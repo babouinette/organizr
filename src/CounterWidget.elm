@@ -5,77 +5,76 @@ import Html.Attributes exposing (..)
 import Html.Events exposing (..)
 
 
-type alias CounterModel =
-    { value : Int }
+type alias Model =
+    Int
+
+
+initialModel =
+    0
 
 
 
 -- UPDATE
 
 
-type alias WidgetId =
-    Int
-
-
-type alias NewValue =
-    Int
-
-
 type Msg
-    = UpdateValue CounterModel WidgetId NewValue
-    | ResetValue CounterModel WidgetId
-    | DeleteWidget WidgetId
+    = Increment
+    | Decrement
+    | Reset
+    | Delete
 
 
-update : Msg -> Model -> ( Model, Cmd Msg )
+type OutMsg
+    = OutNoOp
+    | DeleteWidget
+
+
+update : Msg -> Model -> Model
 update message model =
     case message of
-        UpdateValue counterModel widgetId newValue ->
-            updateValue counterModel widgetId newValue model
+        Increment ->
+            model + 1
 
-        ResetValue counterModel widgetId ->
-            updateValue counterModel widgetId 0 model
+        Decrement ->
+            model - 1
 
-        DeleteWidget widgetId ->
-            (List.take widgetId model ++ List.drop (widgetId + 1) model) ! [ Cmd.none ]
+        Reset ->
+            0
+
+        Delete ->
+            model
 
 
-updateValue : CounterModel -> WidgetId -> NewValue -> Model -> ( Model, Cmd Msg )
-updateValue counterModel widgetId newValue model =
-    let
-        nextModel =
-            List.indexedMap
-                (\index widget ->
-                    if widgetId == index then
-                        Counter { counterModel | value = newValue }
-                    else
-                        widget
-                )
-                model
-    in
-        nextModel ! [ Cmd.none ]
+updateOutMsg : Msg -> Model -> OutMsg
+updateOutMsg msg model =
+    case msg of
+        Delete ->
+            DeleteWidget
+
+        _ ->
+            OutNoOp
 
 
 
 -- VIEW
 
 
-view : Int -> CounterModel -> Html Msg
-view widgetId counterModel =
+view : Int -> Model -> Html Msg
+view widgetId model =
     div [ class "column is-one-third" ]
         [ div [ class "card" ]
             [ header [ class "card-header" ]
-                [ p [ class "card-header-title" ] [ text ("Counter number " ++ toString (widgetId)) ] ]
+                [ p [ class "card-header-title" ] [ text ("Counter " ++ toString (widgetId)) ] ]
             , div [ class "card-content" ]
                 [ div [ class "content has-text-centered" ]
-                    [ div [] [ text (toString counterModel.value) ]
+                    [ div [] [ text (toString model) ]
                     ]
                 ]
             , footer [ class "card-footer" ]
-                [ a [ class "card-footer-item", onClick <| UpdateValue counterModel widgetId (counterModel.value - 1) ] [ text "-" ]
-                , a [ class "card-footer-item", onClick <| UpdateValue counterModel widgetId (counterModel.value + 1) ] [ text "+" ]
-                , a [ class "card-footer-item", onClick <| ResetValue counterModel widgetId ] [ text "Reset" ]
-                , a [ class "card-footer-item", onClick <| DeleteWidget widgetId ] [ text "Delete" ]
+                [ a [ class "card-footer-item", onClick Decrement ] [ text "-" ]
+                , a [ class "card-footer-item", onClick Increment ] [ text "+" ]
+                , a [ class "card-footer-item", onClick Reset ] [ text "Reset" ]
+                , a [ class "card-footer-item", onClick Delete ] [ text "Delete" ]
                 ]
             ]
         ]
